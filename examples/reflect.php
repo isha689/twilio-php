@@ -1,39 +1,97 @@
 <?php
-require(__DIR__.'/../src/Twilio/autoload.php');
+require(__DIR__ . '/../src/Twilio/autoload.php');
 
-function recursiveDelete($str) {
-    if (is_file($str)) {
-        return @unlink($str);
+function ownProperties($reflection): array
+{
+    $properties = $reflection->getProperties();
+    $ownProperties = [];
+
+    foreach ($properties as $property) {
+        if ($property->getDeclaringClass()->getName() == $reflection->getName()) {
+            $ownProperties[$property->getName()] = $property->getModifiers();
+        }
     }
-    elseif (is_dir($str)) {
-        $scan = glob(rtrim($str,'/').'/*');
-        foreach($scan as $index=>$path) {
-            recursiveDelete($path);
+    return $ownProperties;
+}
+
+function ownMethods($reflection): array
+{
+    $methods = $reflection->getMethods();
+    $ownMethods = [];
+    foreach ($methods as $method) {
+        if ($method->getDeclaringClass()->getName() == $reflection->getName()) {
+            $ownMethods[] = $method;
+        }
+    }
+    sort($ownMethods);
+    return $ownMethods;
+}
+
+function parameters($methods): array
+{
+    $parameters = [];
+
+    foreach ($methods as $method) {
+        $params = $method->getParameters();
+        foreach ($params as $param) {
+            $parameters["name"] = $param;
+            $parameters["type"] = (string)$param->getType();
+        }
+    }
+
+    return $parameters;
+}
+
+function reflectionTest($str)
+{
+
+
+    if (is_file($str)) {
+        $filename = $str;
+        $filename = preg_replace("(../src/)", "", $filename);
+        $filename = preg_replace("(/)", "\\", $filename);
+
+        if (strpos($filename, ".php") !== false) {
+            $filename = preg_replace("(\.php)", "", $filename);
+            $reflection = new ReflectionClass($filename);
+
+            $filename1 = preg_replace("(Twilio\\\Rest)", "Twilio\Rest2", $filename);
+            $reflection1 = new ReflectionClass($filename1);
+
+            $properties = ownProperties($reflection);
+            $properties1 = ownProperties($reflection1);
+
+            $methods = ownMethods($reflection);
+            $methods1 = ownMethods($reflection1);
+
+            $parameters = parameters($methods);
+            $parameters1 = parameters($methods1);
+
+            $methodNames = [];
+            $methodNames1 = [];
+
+            foreach ($methods as $method) {
+                $methodNames[] = $method->getName();
+            }
+            foreach ($methods1 as $method) {
+                $methodNames1[] = $method->getName();
+            }
+
+            try {
+                assert($properties == $properties1, $filename1);
+                assert($methodNames == $methodNames1, $filename1);
+                assert($parameters == $parameters1, $filename1);
+            } catch (AssertionError $e) {
+                echo $e->getMessage() . "\n";
+            }
+
+        }
+    } elseif (is_dir($str)) {
+        $scan = glob(rtrim($str, '/') . '/*');
+        foreach ($scan as $index => $path) {
+            reflectionTest($path);
         }
     }
 }
-recursiveDelete("../reflectionCode/");
 
-foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator('../src/Twilio/Rest/Wireless')) as $filename)
-{
-
-    if ($filename->isDir()) continue;
-
-    $filename = preg_replace("(../src/)","",$filename);
-    $filename = preg_replace("(/)","\\",$filename);
-
-    if(strpos($filename,".php")!==false){
-        $pos = strrpos($filename,"\\");
-        $filename = preg_replace("(\.php)","",$filename);
-
-        $file = substr($filename,$pos+1);
-        $file = "../reflectionCode/" . $file;
-        $reflection = new ReflectionClass($filename);
-        $str=(string) $reflection;
-        $str = preg_replace("((@@).*)","",$str);
-        $str = preg_replace("(/*\*.*)","",$str);
-        $str = preg_replace("/\s\s+/","\n",$str);
-        $str = preg_replace("/^[ \t]*[\r\n]+/m","",$str);
-        file_put_contents($file, $str);
-    }
-}
+reflectionTest("../src/Twilio/Rest/");
